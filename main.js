@@ -1,6 +1,4 @@
-// chatMemory.js
 import { ChatMessageHistory } from "langchain/memory";
-// import { RunnableWithMessageHistory } from "langchain/runnables";
 import { RunnableWithMessageHistory } from "@langchain/core/runnables";
 import { ChatOpenAI } from "@langchain/openai";
 import { StringOutputParser } from "@langchain/core/output_parsers";
@@ -8,15 +6,15 @@ import { RunnableSequence, RunnablePassthrough } from "@langchain/core/runnables
 import { PromptTemplate } from "@langchain/core/prompts";
 import { retriever } from "./retriever.js";
 import { combineDocuments } from "./combineDocuments.js";
-
+import { HumanMessage, AIMessage } from "@langchain/core/messages";
 
 const openAIApiKey = process.env.OPENAI_API_KEY;
 const llm = new ChatOpenAI({ openAIApiKey });
 
-// Store for chat histories
+// Enhanced session histories store
 const sessionHistories = new Map();
 
-// Function to get or create chat history for a session
+// Enhanced function to get or create chat history for a session
 function getSessionHistory(sessionId) {
     if (!sessionHistories.has(sessionId)) {
         sessionHistories.set(sessionId, new ChatMessageHistory());
@@ -24,12 +22,18 @@ function getSessionHistory(sessionId) {
     return sessionHistories.get(sessionId);
 }
 
-// Create the chain as before, but with some modifications to handle message history
+// Improved standalone question template with better context handling
 const standaloneQuestionTemplate = `Given the following conversation history and a question, 
-convert the question to a standalone question that captures the full context.
-Chat History: {history}
-Question: {question} 
-Standalone question:`;
+convert the question to a standalone question that captures the full context of the conversation.
+If the question is related to previous messages, incorporate that context.
+If the question seems independent, keep it as is.
+
+Chat History:
+{history}
+
+Current Question: {question}
+
+Standalone question (incorporate context if needed):`;
 
 const standaloneQuestionPrompt = PromptTemplate.fromTemplate(standaloneQuestionTemplate);
 
@@ -41,12 +45,24 @@ const retrievalChain = RunnableSequence.from([
     combineDocuments
 ]);
 
+// Enhanced answer template with better context integration
 const answerTemplate = `You are a helpful and enthusiastic support bot who can answer questions about Scrimba based on 
-the context provided. Consider the chat history for context.
-Previous conversation history: {history}
-Context from documents: {context}
-Question: {question}
-Answer:`
+the context provided. Use the chat history to maintain conversation continuity.
+
+Previous conversation history:
+{history}
+
+Retrieved context: {context}
+
+Current question: {question}
+
+Instructions:
+1. Consider both the chat history and current question to maintain context
+2. Reference previous interactions when relevant
+3. Provide a coherent response that acknowledges any previous context
+4. If the question relates to previous discussion, explicitly make those connections
+
+Answer:`;
 
 const answerPrompt = PromptTemplate.fromTemplate(answerTemplate);
 
@@ -66,7 +82,7 @@ const chain = RunnableSequence.from([
     answerChain
 ]);
 
-// Wrap the chain with message history
+// Enhanced chain with message history
 const chainWithHistory = new RunnableWithMessageHistory({
     runnable: chain,
     getMessageHistory: getSessionHistory,
@@ -74,17 +90,43 @@ const chainWithHistory = new RunnableWithMessageHistory({
     historyMessagesKey: "history",
 });
 
-// Main function to process conversations
+// Enhanced conversation processing function
 export async function progressConversation(question, sessionId) {
     try {
+        // Get the history for this session
+        const history = await getSessionHistory(sessionId);
+        
+        // Process the conversation
         const response = await chainWithHistory.invoke(
-            { question },
-            { configurable: { sessionId } }
+            { 
+                question,
+                history: await formatHistory(history)
+            },
+            { 
+                configurable: { sessionId }
+            }
         );
+        
+        // Save the interaction to history
+        await history.addMessages([
+            new HumanMessage(question),
+            new AIMessage(response)
+        ]);
         
         return response;
     } catch (error) {
         console.error('Error in conversation:', error);
         return "I'm sorry, I encountered an error. Please try again or contact support.";
     }
+}
+
+// Helper function to format history for the prompt
+async function formatHistory(history) {
+    const messages = await history.getMessages();
+    if (messages.length === 0) return "No previous conversation.";
+    
+    return messages.map(msg => {
+        const role = msg._getType() === 'human' ? 'Human' : 'Assistant';
+        return `${role}: ${msg.content}`;
+    }).join('\n');
 }

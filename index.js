@@ -13,8 +13,8 @@ app.use(cors()); // Add CORS middleware to handle cross-origin requests
 
 // Add language detection middleware
 const detectLanguage = (req, res, next) => {
-    const preferredLanguage = req.headers['accept-language'] || 'id'; // Default to Indonesian
-    req.userLanguage = preferredLanguage.startsWith('id') ? 'id' : 'en';
+    const preferredLanguage = req.headers['accept-language'] || 'en'; // Default to Indonesian
+    // req.userLanguage = preferredLanguage.startsWith('end') ? 'id' : 'en';
     next();
 };
 
@@ -42,7 +42,7 @@ app.post("/chat", async (req, res) => {
     } catch (error) {
         console.error('Server error:', error);
         res.status(500).json({
-            error: req.userLanguage === 'id' 
+            error: req.userLanguage === 'en' 
                 ? "Maaf, terjadi kesalahan pada server. Silakan coba lagi nanti."
                 : "Sorry, there was a server error. Please try again later."
         });
