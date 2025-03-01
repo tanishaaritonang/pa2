@@ -83,6 +83,9 @@ function setLoading(isLoading) {
 // Optional: Add clear conversation functionality
 function clearConversation() {
     chatbotConversation.innerHTML = '';
+    sessionStorage.removeItem("sessionId"); // Reset session
+    sessionId = Date.now().toString(); // Generate new session ID
+    sessionStorage.setItem("sessionId", sessionId);
     // You might want to also send a request to the server to clear the session
     fetch('http://localhost:3000/clear-chat', {
         method: 'POST',
@@ -94,4 +97,4 @@ function clearConversation() {
 }
 
 // Optional: Add this to your HTML
-// <button onclick="clearConversation()">Clear Chat</button>
+//<button onclick="clearConversation()">Clear Chat</button>
